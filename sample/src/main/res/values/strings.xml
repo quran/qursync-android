@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">QurSyncExample</string>
+    <string name="authorize">Authorize</string>
+    <string name="logout">Log Out</string>
+    <string name="add_bookmark">Add Bookmark</string>
+</resources>
