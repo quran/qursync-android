@@ -3,6 +3,7 @@ package com.quran.profiles.sample.app;
 import com.quran.profiles.library.QuranSync;
 import com.quran.profiles.library.api.QuranSyncApi;
 import com.quran.profiles.library.api.model.Bookmark;
+import com.quran.profiles.library.api.model.Pointer;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -12,6 +13,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -21,6 +23,7 @@ import android.widget.ListView;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
+import java.util.Map;
 
 import retrofit.Callback;
 import retrofit.RetrofitError;
@@ -31,9 +34,9 @@ public class MainActivity extends Activity {
   private static final String TAG =
       "com.quran.profiles.sample.app.MainActivity";
 
-  private static final String API_KEY = "";
-  private static final String API_SECRET = "";
-  private static final String CALLBACK = "qursync://authenticate";
+  private static final String API_KEY = Constants.API_KEY;
+  private static final String API_SECRET = Constants.API_SECRET;
+  private static final String CALLBACK = Constants.CALLBACK;
 
   private static final String PREF_TOKEN = "pref_token";
   private static TokenHandler sHandler = new TokenHandler();
@@ -85,7 +88,13 @@ public class MainActivity extends Activity {
       @Override
       public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         if (mBookmarks != null && position < mBookmarks.size()) {
-          deleteBookmark(mBookmarks.get(position).getId());
+          final Bookmark b = mBookmarks.get(position);
+          if (TextUtils.isEmpty(b.getName()) && b.getPointer() != null) {
+            b.setName("bookmark " + System.currentTimeMillis());
+            updateBookmark(b);
+          } else {
+            deleteBookmark(mBookmarks.get(position).getId());
+          }
         }
       }
     });
@@ -132,7 +141,8 @@ public class MainActivity extends Activity {
         }
         case R.id.add_bookmark: {
           final int page = 1 + (int)(Math.random() * 604);
-          addBookmark(page);
+          final Bookmark bookmark = new Bookmark(Pointer.fromPage(page));
+          addBookmark(bookmark);
           break;
         }
       }
@@ -143,7 +153,7 @@ public class MainActivity extends Activity {
     Log.d(TAG, "handleIntent()");
     final Uri uri = intent.getData();
     if (uri != null) {
-      android.util.Log.d(TAG, "got uri: " + uri);
+      Log.d(TAG, "got uri: " + uri);
       final String code = uri.getQueryParameter("code");
       mQuranSync.getAccessToken(code, sHandler);
     }
@@ -186,9 +196,10 @@ public class MainActivity extends Activity {
     });
   }
 
-  private void addBookmark(int page) {
+  private void addBookmark(Bookmark bookmark) {
+    final Map<String, String> params = bookmark.getParameters();
     final QuranSyncApi api = mQuranSync.getApi();
-    api.addPageBookmark(page, new Callback<Bookmark>() {
+    api.addBookmark(params, new Callback<Bookmark>() {
       @Override
       public void success(Bookmark bookmarks, Response response) {
         Log.d(TAG, "successfully added bookmark!");
@@ -214,6 +225,23 @@ public class MainActivity extends Activity {
       @Override
       public void failure(RetrofitError retrofitError) {
         Log.e(TAG, "error deleting bookmark", retrofitError);
+      }
+    });
+  }
+
+  private void updateBookmark(Bookmark bookmark) {
+    final Map<String, String> params = bookmark.getParameters();
+    final QuranSyncApi api = mQuranSync.getApi();
+    api.updateBookmark(bookmark.getId(), params, new Callback<Bookmark>() {
+      @Override
+      public void success(Bookmark bookmarks, Response response) {
+        Log.d(TAG, "successfully updated bookmark!");
+        requestBookmarks();
+      }
+
+      @Override
+      public void failure(RetrofitError retrofitError) {
+        Log.e(TAG, "error updating bookmark", retrofitError);
       }
     });
   }

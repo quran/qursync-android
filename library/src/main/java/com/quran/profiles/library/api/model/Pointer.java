@@ -5,9 +5,9 @@ package com.quran.profiles.library.api.model;
  * Created by ahmedre on 5/18/14.
  */
 public class Pointer {
-  int page;
-  int chapter;
-  int verse;
+  Integer page;
+  Integer chapter;
+  Integer verse;
 
   public Pointer() {
   }
@@ -25,12 +25,24 @@ public class Pointer {
     return p;
   }
 
+  public Integer getPage() {
+    return this.page;
+  }
+
+  public Integer getChapter() {
+    return this.chapter;
+  }
+
+  public Integer getVerse() {
+    return this.verse;
+  }
+
   @Override
   public String toString() {
     final StringBuilder builder = new StringBuilder("");
-    if (page > 0) {
+    if (page != null) {
       builder.append("Page: ").append(this.page);
-    } else if (chapter > 0 && this.verse > 0) {
+    } else if (chapter != null && this.verse != null) {
       builder.append("Sura: ").append(this.chapter)
           .append(", Ayah: ").append(this.verse);
     }
