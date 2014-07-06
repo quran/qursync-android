@@ -1,14 +1,13 @@
 package com.quran.profiles.library.api;
 
 import com.quran.profiles.library.api.model.Bookmark;
+import com.quran.profiles.library.api.model.Tag;
 
 import java.util.List;
-import java.util.Map;
 
 import retrofit.Callback;
+import retrofit.http.Body;
 import retrofit.http.DELETE;
-import retrofit.http.FieldMap;
-import retrofit.http.FormUrlEncoded;
 import retrofit.http.GET;
 import retrofit.http.POST;
 import retrofit.http.PUT;
@@ -23,18 +22,23 @@ public interface QuranSyncApi {
   @GET("/bookmarks")
   void getBookmarks(Callback<List<Bookmark>> callback);
 
-  @FormUrlEncoded
   @POST("/bookmarks")
-  void addBookmark(@FieldMap Map<String, String> params,
-      Callback<Bookmark> callback);
+  void addBookmark(@Body Bookmark params, Callback<Bookmark> callback);
 
-  @FormUrlEncoded
   @PUT("/bookmarks/{bookmarkId}")
   void updateBookmark(@Path("bookmarkId") int bookmarkId,
-      @FieldMap Map<String, String> params,
-      Callback<Bookmark> callback);
+      @Body Bookmark params, Callback<Bookmark> callback);
 
   @DELETE("/bookmarks/{bookmarkId}")
   void deleteBookmark(@Path("bookmarkId") int bookmarkId,
       Callback<Bookmark> callback);
+
+  @GET("/tags")
+  void getTags(Callback<List<Tag>> callback);
+
+  @POST("/tags")
+  void addTag(@Body Tag tag);
+
+  @DELETE("/tags/{tagId}")
+  void deleteTag(@Path("tagId") int tagId, Callback<Tag> callback);
 }

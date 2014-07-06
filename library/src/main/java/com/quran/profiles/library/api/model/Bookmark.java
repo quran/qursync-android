@@ -1,8 +1,8 @@
 package com.quran.profiles.library.api.model;
 
+import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 /**
  * Bookmark object
@@ -16,6 +16,9 @@ public class Bookmark {
   Date updatedAt;
   String etag;
   Pointer pointer;
+  Integer[] tagIds;
+  List<String> tags;
+  Tag[] newTags;
 
   public Bookmark() {
   }
@@ -65,18 +68,19 @@ public class Bookmark {
     this.isDefault = isDefault;
   }
 
-  public Map<String, String> getParameters() {
-    final Map<String, String> map = new HashMap<String, String>();
-    map.put("name", this.name);
-    map.put("page", this.pointer.page == null ? null :
-        String.valueOf(this.pointer.page));
-    map.put("chapter", this.pointer.chapter == null ? null :
-        String.valueOf(this.pointer.chapter));
-    map.put("verse", this.pointer.verse == null ? null :
-        String.valueOf(this.pointer.verse));
-    map.put("is_default", String.valueOf(isDefault));
-    map.put("etag", this.etag);
-    return map;
+  public Integer[] getTagIds() {
+    return this.tagIds;
+  }
+
+  public void setTagIds(Integer[] tagIds) {
+    this.tagIds = tagIds;
+  }
+
+  public void addTag(String name) {
+    if (this.tags == null) {
+      this.tags = new ArrayList<String>();
+    }
+    this.tags.add(name);
   }
 
   @Override

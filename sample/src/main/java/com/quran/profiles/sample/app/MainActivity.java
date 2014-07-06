@@ -23,7 +23,6 @@ import android.widget.ListView;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
-import java.util.Map;
 
 import retrofit.Callback;
 import retrofit.RetrofitError;
@@ -197,11 +196,10 @@ public class MainActivity extends Activity {
   }
 
   private void addBookmark(Bookmark bookmark) {
-    final Map<String, String> params = bookmark.getParameters();
     final QuranSyncApi api = mQuranSync.getApi();
-    api.addBookmark(params, new Callback<Bookmark>() {
+    api.addBookmark(bookmark, new Callback<Bookmark>() {
       @Override
-      public void success(Bookmark bookmarks, Response response) {
+      public void success(Bookmark bookmark, Response response) {
         Log.d(TAG, "successfully added bookmark!");
         requestBookmarks();
       }
@@ -230,11 +228,10 @@ public class MainActivity extends Activity {
   }
 
   private void updateBookmark(Bookmark bookmark) {
-    final Map<String, String> params = bookmark.getParameters();
     final QuranSyncApi api = mQuranSync.getApi();
-    api.updateBookmark(bookmark.getId(), params, new Callback<Bookmark>() {
+    api.updateBookmark(bookmark.getId(), bookmark, new Callback<Bookmark>() {
       @Override
-      public void success(Bookmark bookmarks, Response response) {
+      public void success(Bookmark bookmark, Response response) {
         Log.d(TAG, "successfully updated bookmark!");
         requestBookmarks();
       }
