@@ -32,7 +32,7 @@ public class Bookmark {
     this.pointer = pointer;
   }
 
-  public int getId() {
+  public Integer getId() {
     return this.id;
   }
 

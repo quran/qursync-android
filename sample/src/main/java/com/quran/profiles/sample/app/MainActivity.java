@@ -1,7 +1,7 @@
 package com.quran.profiles.sample.app;
 
 import com.quran.profiles.library.QuranSync;
-import com.quran.profiles.library.api.QuranSyncApi;
+import com.quran.profiles.library.SyncResult;
 import com.quran.profiles.library.api.model.Bookmark;
 import com.quran.profiles.library.api.model.Pointer;
 
@@ -13,20 +13,25 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
-import android.text.TextUtils;
 import android.util.Log;
+import android.util.SparseArray;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ListView;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.List;
 
-import retrofit.Callback;
-import retrofit.RetrofitError;
-import retrofit.client.Response;
+import rx.Subscription;
+import rx.android.observables.AndroidObservable;
+import rx.functions.Action1;
 
 
 public class MainActivity extends Activity {
@@ -42,16 +47,20 @@ public class MainActivity extends Activity {
 
   private Button mButton;
   private Button mAddButton;
+  private Button mSyncButton;
   private QuranSync mQuranSync;
   private SharedPreferences mPrefs;
-  private ListView mListView;
   private List<Bookmark> mBookmarks;
+  private BookmarksAdapter mAdapter;
+  private SparseArray<Bookmark> mUpdates;
+  private SparseArray<Bookmark> mDeletions;
+  private Subscription mSubscription;
 
   static class TokenHandler extends Handler {
     private WeakReference<MainActivity> mActivityReference;
 
     public void setActivity(MainActivity activity) {
-      mActivityReference = new WeakReference<MainActivity>(activity);
+      mActivityReference = new WeakReference<>(activity);
     }
 
     @Override
@@ -79,30 +88,33 @@ public class MainActivity extends Activity {
     setContentView(R.layout.main);
     mButton = (Button) findViewById(R.id.authorize);
     mAddButton = (Button) findViewById(R.id.add_bookmark);
+    mSyncButton = (Button) findViewById(R.id.sync);
     mButton.setOnClickListener(mOnClickListener);
     mAddButton.setOnClickListener(mOnClickListener);
+    mSyncButton.setOnClickListener(mOnClickListener);
 
-    mListView = (ListView) findViewById(R.id.bookmarks);
-    mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-      @Override
-      public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-        if (mBookmarks != null && position < mBookmarks.size()) {
-          final Bookmark b = mBookmarks.get(position);
-          if (TextUtils.isEmpty(b.getName()) && b.getPointer() != null) {
-            b.setName("bookmark " + System.currentTimeMillis());
-            updateBookmark(b);
-          } else {
-            deleteBookmark(mBookmarks.get(position).getId());
-          }
-        }
-      }
-    });
+    final ListView listView = (ListView) findViewById(R.id.bookmarks);
+    mAdapter = new BookmarksAdapter();
+    listView.setAdapter(mAdapter);
+
+    mBookmarks = new ArrayList<>();
+    mDeletions = new SparseArray<>();
+    mUpdates = new SparseArray<>();
 
     final boolean loggedIn = mQuranSync.isAuthorized();
     mButton.setText(!loggedIn ?
         R.string.authorize : R.string.logout);
     mAddButton.setEnabled(loggedIn);
+    mSyncButton.setEnabled(loggedIn);
     handleIntent(getIntent());
+  }
+
+  @Override
+  protected void onDestroy() {
+    if (mSubscription != null) {
+      mSubscription.unsubscribe();
+    }
+    super.onDestroy();
   }
 
   @Override
@@ -135,6 +147,7 @@ public class MainActivity extends Activity {
             mQuranSync.clearToken();
             mButton.setText(R.string.authorize);
             mAddButton.setEnabled(false);
+            mSyncButton.setEnabled(false);
           }
           break;
         }
@@ -142,6 +155,10 @@ public class MainActivity extends Activity {
           final int page = 1 + (int)(Math.random() * 604);
           final Bookmark bookmark = new Bookmark(Pointer.fromPage(page));
           addBookmark(bookmark);
+          break;
+        }
+        case R.id.sync: {
+          syncBookmarks();
           break;
         }
       }
@@ -158,7 +175,7 @@ public class MainActivity extends Activity {
     }
 
     if (mQuranSync.isAuthorized()) {
-      requestBookmarks();
+      syncBookmarks();
     }
   }
 
@@ -173,73 +190,94 @@ public class MainActivity extends Activity {
     mPrefs.edit()
         .putString(PREF_TOKEN, token).commit();
     mAddButton.setEnabled(true);
-    requestBookmarks();
+    mSyncButton.setEnabled(true);
+    syncBookmarks();
   }
 
-  private void requestBookmarks() {
-    final QuranSyncApi api = mQuranSync.getApi();
-    api.getBookmarks(new Callback<List<Bookmark>>() {
-      @Override
-      public void success(List<Bookmark> bookmarks, Response response) {
-        Log.d(TAG, "successfully requested bookmarks!");
-        mBookmarks = bookmarks;
-        mListView.setAdapter(new ArrayAdapter<Bookmark>(
-            MainActivity.this, android.R.layout.simple_list_item_1,
-            mBookmarks));
-      }
+  private void syncBookmarks() {
+    mAddButton.setEnabled(false);
+    mSyncButton.setEnabled(false);
 
-      @Override
-      public void failure(RetrofitError retrofitError) {
-        Log.e(TAG, "error requesting bookmarks", retrofitError);
-      }
-    });
+    mSubscription = AndroidObservable.bindActivity(this,
+        mQuranSync.sync(mBookmarks, mUpdates, mDeletions))
+        .subscribe(new Action1<SyncResult>() {
+          @Override
+          public void call(SyncResult result) {
+            mUpdates.clear();
+            mDeletions.clear();
+            mBookmarks = result.bookmarks;
+            mAdapter.notifyDataSetChanged();
+
+            mAddButton.setEnabled(true);
+            mSyncButton.setEnabled(true);
+            Toast.makeText(MainActivity.this,
+                getString(R.string.sync_done), Toast.LENGTH_SHORT).show();
+            mSubscription = null;
+          }
+        });
   }
 
   private void addBookmark(Bookmark bookmark) {
-    final QuranSyncApi api = mQuranSync.getApi();
-    api.addBookmark(bookmark, new Callback<Bookmark>() {
-      @Override
-      public void success(Bookmark bookmark, Response response) {
-        Log.d(TAG, "successfully added bookmark!");
-        requestBookmarks();
-      }
-
-      @Override
-      public void failure(RetrofitError retrofitError) {
-        Log.e(TAG, "error adding bookmark", retrofitError);
-      }
-    });
+    mBookmarks.add(bookmark);
+    mAdapter.notifyDataSetChanged();
   }
 
-  private void deleteBookmark(int id) {
-    final QuranSyncApi api = mQuranSync.getApi();
-    api.deleteBookmark(id, new Callback<Bookmark>() {
-      @Override
-      public void success(Bookmark bookmark, Response response) {
-        Log.d(TAG, "successfully deleted bookmark");
-        requestBookmarks();
-      }
-
-      @Override
-      public void failure(RetrofitError retrofitError) {
-        Log.e(TAG, "error deleting bookmark", retrofitError);
-      }
-    });
+  private void deleteBookmark(Bookmark bookmark) {
+    if (bookmark.getId() != null) {
+      mDeletions.put(bookmark.getId(), bookmark);
+    }
+    mBookmarks.remove(bookmark);
+    mAdapter.notifyDataSetChanged();
   }
 
-  private void updateBookmark(Bookmark bookmark) {
-    final QuranSyncApi api = mQuranSync.getApi();
-    api.updateBookmark(bookmark.getId(), bookmark, new Callback<Bookmark>() {
-      @Override
-      public void success(Bookmark bookmark, Response response) {
-        Log.d(TAG, "successfully updated bookmark!");
-        requestBookmarks();
-      }
+  private class BookmarksAdapter extends BaseAdapter {
+    private LayoutInflater mInflater;
 
-      @Override
-      public void failure(RetrofitError retrofitError) {
-        Log.e(TAG, "error updating bookmark", retrofitError);
+    public BookmarksAdapter() {
+      mInflater = LayoutInflater.from(MainActivity.this);
+    }
+
+    @Override
+    public int getCount() {
+      return mBookmarks == null ? 0 : mBookmarks.size();
+    }
+
+    @Override
+    public Object getItem(int position) {
+      return mBookmarks.get(position);
+    }
+
+    @Override
+    public long getItemId(int position) {
+      return position;
+    }
+
+    @Override
+    public View getView(int position, View convertView, ViewGroup parent) {
+      ViewHolder vh;
+      if (convertView == null) {
+        convertView = mInflater.inflate(R.layout.bookmark_item, parent, false);
+        vh = new ViewHolder();
+        vh.title = (TextView) convertView.findViewById(R.id.title);
+        vh.delete = (ImageButton) convertView.findViewById(R.id.delete);
+        convertView.setTag(vh);
       }
-    });
+      vh = (ViewHolder) convertView.getTag();
+
+      final Bookmark bookmark = (Bookmark) getItem(position);
+      vh.title.setText(bookmark.toString());
+      vh.delete.setOnClickListener(new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          deleteBookmark(bookmark);
+        }
+      });
+      return convertView;
+    }
+  }
+
+  public static class ViewHolder {
+    public TextView title;
+    public ImageButton delete;
   }
 }

@@ -5,13 +5,13 @@ import com.quran.profiles.library.api.model.Tag;
 
 import java.util.List;
 
-import retrofit.Callback;
 import retrofit.http.Body;
 import retrofit.http.DELETE;
 import retrofit.http.GET;
 import retrofit.http.POST;
 import retrofit.http.PUT;
 import retrofit.http.Path;
+import rx.Observable;
 
 /**
  * QuranSync Retrofit Api
@@ -20,25 +20,24 @@ import retrofit.http.Path;
 public interface QuranSyncApi {
 
   @GET("/bookmarks")
-  void getBookmarks(Callback<List<Bookmark>> callback);
+  Observable<List<Bookmark>> getBookmarks();
 
   @POST("/bookmarks")
-  void addBookmark(@Body Bookmark params, Callback<Bookmark> callback);
+  Observable<Bookmark> addBookmark(@Body Bookmark params);
 
   @PUT("/bookmarks/{bookmarkId}")
-  void updateBookmark(@Path("bookmarkId") int bookmarkId,
-      @Body Bookmark params, Callback<Bookmark> callback);
+  Observable<Bookmark> updateBookmark(@Path("bookmarkId") int bookmarkId,
+      @Body Bookmark params);
 
   @DELETE("/bookmarks/{bookmarkId}")
-  void deleteBookmark(@Path("bookmarkId") int bookmarkId,
-      Callback<Bookmark> callback);
+  Observable<Bookmark> deleteBookmark(@Path("bookmarkId") int bookmarkId);
 
   @GET("/tags")
-  void getTags(Callback<List<Tag>> callback);
+  Observable<List<Tag>> getTags();
 
   @POST("/tags")
-  void addTag(@Body Tag tag);
+  Observable<Tag> addTag(@Body Tag tag);
 
   @DELETE("/tags/{tagId}")
-  void deleteTag(@Path("tagId") int tagId, Callback<Tag> callback);
+  Observable<Tag> deleteTag(@Path("tagId") int tagId);
 }

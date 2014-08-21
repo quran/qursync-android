@@ -4,4 +4,6 @@
     <string name="authorize">Authorize</string>
     <string name="logout">Log Out</string>
     <string name="add_bookmark">Add Bookmark</string>
+    <string name="sync">Sync</string>
+    <string name="sync_done">Sync Done</string>
 </resources>

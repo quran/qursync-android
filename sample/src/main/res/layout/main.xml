@@ -15,6 +15,11 @@
         android:layout_height="wrap_content"
         android:text="@string/add_bookmark"/>
 
+    <Button android:id="@+id/sync"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/sync"/>
+
     <ListView android:id="@+id/bookmarks"
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>

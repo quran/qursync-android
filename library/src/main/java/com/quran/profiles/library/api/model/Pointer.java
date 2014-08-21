@@ -37,6 +37,33 @@ public class Pointer {
     return this.verse;
   }
 
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    Pointer pointer = (Pointer) o;
+    return !(chapter != null ?
+              !chapter.equals(pointer.chapter) : pointer.chapter != null) &&
+        !(page != null ? !page.equals(pointer.page) : pointer.page != null) &&
+        !(verse != null ? !verse.equals(pointer.verse) : pointer.verse != null);
+
+  }
+
+  @Override
+  public int hashCode() {
+    int result = page != null ? page.hashCode() : 0;
+    result = 31 * result + (chapter != null ? chapter.hashCode() : 0);
+    result = 31 * result + (verse != null ? verse.hashCode() : 0);
+    return result;
+  }
+
   @Override
   public String toString() {
     final StringBuilder builder = new StringBuilder("");
