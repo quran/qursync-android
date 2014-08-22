@@ -125,58 +125,19 @@ public class QuranSync {
     }).start();
   }
 
-  public Observable<SyncResult> sync(
-      final List<Bookmark> bookmarks,
-      final SparseArray<Bookmark> updates,
-      final SparseArray<Bookmark> deletions) {
+  public Observable<SyncResult> sync(final QuranSyncClient client) {
     Log.d(TAG, "sync");
 
-    /**
-     * explanation
-     * we return the combined result of bookmarks and tags (both
-     * of which are defined below).
-     * note that bookmarks and tags should run in parallel.
-     *
-     * bookmarks
-     *   1. get an array containing the server bookmarks
-     *   2. add to the above array any local bookmarks that don't
-     *      yet exist on the server.
-     *   3. for each item in the array, either:
-     *      a. make an api call to add
-     *      b. make an api call to delete
-     *      c. make an api call to update
-     *   4. remove any null bookmarks and return as a list.
-     *
-     *   note that these api calls happen in parallel (minus the
-     *   first call, which is intentionally blocking any other work).
-     *
-     * tags
-     *   currently just gets a list of tags from the server.
-     *
-     *
-     * current TODO
-     * 1. switch parameters to an interface with a set of methods,
-     *    since we'll eventually need more than the current params
-     * 2. implement tags - in simplest case, we should do something
-     *    similar to bookmarks.
-     * 3. currently, if server has a bookmark for page 5, and a fresh
-     *    client adds this bookmark before syncing, sync will keep the
-     *    server's and ignore the clients. is this correct, or should
-     *    the client win in this case (ie become an update?)
-     * 4. speaking of updates, what is the right thing to do if the
-     *    server etag is different than the client etag? do we drop
-     *    the client change?
-     * 5. edge cases - ex, client says update bookmark 3, server no
-     *    longer has bookmark 3 - what happens? currently, we ignore it.
-     * 6. error handling
-     * 7. document the code inline
-     *
-     * we currently return an observable, which the activity subscribes
-     * to. perhaps it makes more sense to offer a version which takes a
-     * callback instead, which we call once we are done (so developers
-     * don't have to learn rxjava unless they want to).
-     */
+    final List<Bookmark> clientBookmarks = client.getBookmarks();
+    final SparseArray<Bookmark> localBookmarksMap = new SparseArray<>();
+    for (Bookmark bookmark : clientBookmarks) {
+      final Integer id = bookmark.getId();
+      if (id != null) {
+        localBookmarksMap.put(id, bookmark);
+      }
+    }
 
+    final Set<Integer> deletedBookmarkIds = client.getDeletedBookmarkIds();
     final Observable<List<Bookmark>> bookmarksObservable =
         mApi.getBookmarks()
             .flatMap(new Func1<List<Bookmark>, Observable<Bookmark>>() {
@@ -189,7 +150,7 @@ public class QuranSync {
                 }
 
                 final Observable<Bookmark> additions =
-                    Observable.from(bookmarks)
+                    Observable.from(client.getBookmarks())
                         .filter(new Func1<Bookmark, Boolean>() {
                           @Override
                           public Boolean call(Bookmark bookmark) {
@@ -209,14 +170,17 @@ public class QuranSync {
                 if (id == null) {
                   Log.d(TAG, "adding bookmark: " + b.toString());
                   return mApi.addBookmark(b);
-                } else if (deletions.get(id, null) != null) {
+                } else if (deletedBookmarkIds.contains(id)) {
                   Log.d(TAG, "deleting bookmark: " + b.toString());
                   return mApi.deleteBookmark(id);
-                } else if (updates.get(id, null) != null) {
-                  Log.d(TAG, "updating bookmark: " + b.toString());
-                  return mApi.updateBookmark(id, updates.get(id));
                 } else {
-                  return Observable.from(b);
+                  final Bookmark localBookmark = localBookmarksMap.get(id);
+                  if (localBookmark != null && localBookmark.isUpdateOf(b)) {
+                    Log.d(TAG, "updating bookmark: " + b.toString());
+                    return mApi.updateBookmark(id, localBookmark);
+                  } else {
+                    return Observable.from(b);
+                  }
                 }
               }
             })
@@ -228,20 +192,65 @@ public class QuranSync {
             })
             .toList();
 
-    final Observable<List<Tag>> tagsObservable =
-        mApi.getTags();
+    final List<Tag> clientTags = client.getTags();
+    final SparseArray<Tag> localTagsMap = new SparseArray<>();
+    for (Tag tag : clientTags) {
+      final Integer id = tag.getId();
+      if (id != null) {
+        localTagsMap.put(id, tag);
+      }
+    }
 
-    return Observable.zip(bookmarksObservable, tagsObservable,
-        new Func2<List<Bookmark>, List<Tag>, SyncResult>() {
+    final Set<Integer> deletedTagIds = client.getDeletedTagIds();
+    final Observable<List<Tag>> tagsObservable =
+        mApi.getTags()
+        .flatMap(new Func1<List<Tag>, Observable<Tag>>() {
           @Override
-          public SyncResult call(List<Bookmark> bookmarks, List<Tag> tags) {
-            final SyncResult result = new SyncResult();
-            result.bookmarks = bookmarks;
-            result.tags = tags;
-            return result;
+          public Observable<Tag> call(List<Tag> tags) {
+            return Observable.from(tags);
           }
         })
-        .subscribeOn(Schedulers.io())
-        .observeOn(AndroidSchedulers.mainThread());
+        .flatMap(new Func1<Tag, Observable<Tag>>() {
+          @Override
+          public Observable<Tag> call(Tag tag) {
+            final Integer id = tag.getId();
+            if (id == null) {
+              return mApi.addTag(tag);
+            } else if (deletedTagIds.contains(id)) {
+              return mApi.deleteTag(id);
+            } else {
+              final Tag clientTag = localTagsMap.get(id);
+              if (clientTag != null && clientTag.isUpdateOf(tag)) {
+                return mApi.updateTag(id, clientTag);
+              } else {
+                return Observable.from(tag);
+              }
+            }
+          }
+        })
+        .filter(new Func1<Tag, Boolean>() {
+          @Override
+          public Boolean call(Tag tag) {
+            return tag != null;
+          }
+        }).toList();
+
+    return tagsObservable.flatMap(new Func1<List<Tag>, Observable<SyncResult>>() {
+      @Override
+      public Observable<SyncResult> call(List<Tag> tags) {
+        return Observable.zip(bookmarksObservable, Observable.just(tags),
+            new Func2<List<Bookmark>, List<Tag>, SyncResult>() {
+              @Override
+              public SyncResult call(List<Bookmark> bookmarks, List<Tag> tags) {
+                final SyncResult result = new SyncResult();
+                result.bookmarks = bookmarks;
+                result.tags = tags;
+                return result;
+              }
+            })
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread());
+      }
+    });
   }
 }

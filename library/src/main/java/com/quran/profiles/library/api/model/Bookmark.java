@@ -83,6 +83,11 @@ public class Bookmark {
     this.tags.add(name);
   }
 
+  public boolean isUpdateOf(Bookmark serverBookmark) {
+    return this.updatedAt != null &&
+        !this.updatedAt.equals(serverBookmark.getLastUpdatedDate());
+  }
+
   @Override
   public String toString() {
     final StringBuilder builder = new StringBuilder("");

@@ -1,9 +1,11 @@
 package com.quran.profiles.sample.app;
 
 import com.quran.profiles.library.QuranSync;
+import com.quran.profiles.library.QuranSyncClient;
 import com.quran.profiles.library.SyncResult;
 import com.quran.profiles.library.api.model.Bookmark;
 import com.quran.profiles.library.api.model.Pointer;
+import com.quran.profiles.library.api.model.Tag;
 
 import android.app.Activity;
 import android.content.Intent;
@@ -14,7 +16,6 @@ import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
 import android.util.Log;
-import android.util.SparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -27,7 +28,9 @@ import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import rx.Subscription;
 import rx.android.observables.AndroidObservable;
@@ -52,8 +55,7 @@ public class MainActivity extends Activity {
   private SharedPreferences mPrefs;
   private List<Bookmark> mBookmarks;
   private BookmarksAdapter mAdapter;
-  private SparseArray<Bookmark> mUpdates;
-  private SparseArray<Bookmark> mDeletions;
+  private Set<Integer> mDeletions;
   private Subscription mSubscription;
 
   static class TokenHandler extends Handler {
@@ -98,8 +100,7 @@ public class MainActivity extends Activity {
     listView.setAdapter(mAdapter);
 
     mBookmarks = new ArrayList<>();
-    mDeletions = new SparseArray<>();
-    mUpdates = new SparseArray<>();
+    mDeletions = new HashSet<>();
 
     final boolean loggedIn = mQuranSync.isAuthorized();
     mButton.setText(!loggedIn ?
@@ -194,16 +195,46 @@ public class MainActivity extends Activity {
     syncBookmarks();
   }
 
+  public static class SyncClient implements QuranSyncClient {
+    private List<Bookmark> mBookmarks;
+    private Set<Integer> mDeletions;
+
+    public SyncClient(List<Bookmark> bookmarks, Set<Integer> deletedIds) {
+      mBookmarks = bookmarks;
+      mDeletions = deletedIds;
+    }
+
+    @Override
+    public List<Bookmark> getBookmarks() {
+      return mBookmarks;
+    }
+
+    @Override
+    public Set<Integer> getDeletedBookmarkIds() {
+      return mDeletions;
+    }
+
+    @Override
+    public List<Tag> getTags() {
+      return new ArrayList<>();
+    }
+
+    @Override
+    public Set<Integer> getDeletedTagIds() {
+      return new HashSet<>();
+    }
+  }
+
   private void syncBookmarks() {
     mAddButton.setEnabled(false);
     mSyncButton.setEnabled(false);
 
+    final SyncClient client = new SyncClient(mBookmarks, mDeletions);
     mSubscription = AndroidObservable.bindActivity(this,
-        mQuranSync.sync(mBookmarks, mUpdates, mDeletions))
+        mQuranSync.sync(client))
         .subscribe(new Action1<SyncResult>() {
           @Override
           public void call(SyncResult result) {
-            mUpdates.clear();
             mDeletions.clear();
             mBookmarks = result.bookmarks;
             mAdapter.notifyDataSetChanged();
@@ -224,7 +255,7 @@ public class MainActivity extends Activity {
 
   private void deleteBookmark(Bookmark bookmark) {
     if (bookmark.getId() != null) {
-      mDeletions.put(bookmark.getId(), bookmark);
+      mDeletions.add(bookmark.getId());
     }
     mBookmarks.remove(bookmark);
     mAdapter.notifyDataSetChanged();

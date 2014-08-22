@@ -40,4 +40,7 @@ public interface QuranSyncApi {
 
   @DELETE("/tags/{tagId}")
   Observable<Tag> deleteTag(@Path("tagId") int tagId);
+
+  @PUT("/tags/{tagId}")
+  Observable<Tag> updateTag(@Path("tagId") int tagId, @Body Tag params);
 }

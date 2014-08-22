@@ -20,4 +20,21 @@ public class Tag {
   public Tag(String name) {
     this.name = name;
   }
+
+  public Integer getId() {
+    return this.id;
+  }
+
+  public String getEtag() {
+    return this.etag;
+  }
+
+  public Date getLastUpdatedDate() {
+    return this.updatedAt;
+  }
+
+  public boolean isUpdateOf(Tag serverTag) {
+    return this.updatedAt != null &&
+        !this.updatedAt.equals(serverTag.getLastUpdatedDate());
+  }
 }
