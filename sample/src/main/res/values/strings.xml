@@ -6,4 +6,7 @@
     <string name="add_bookmark">Add Bookmark</string>
     <string name="sync">Sync</string>
     <string name="sync_done">Sync Done</string>
+    <string name="add_tag">Add a Tag</string>
+    <string name="tag">Tag</string>
+    <string name="done">Done</string>
 </resources>

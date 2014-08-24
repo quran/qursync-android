@@ -1,6 +1,5 @@
 package com.quran.profiles.library.api.model;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -19,6 +18,7 @@ public class Bookmark {
   Integer[] tagIds;
   List<String> tags;
   Tag[] newTags;
+  boolean overrideTags;
 
   public Bookmark() {
   }
@@ -72,15 +72,14 @@ public class Bookmark {
     return this.tagIds;
   }
 
-  public void setTagIds(Integer[] tagIds) {
-    this.tagIds = tagIds;
+  public List<String> getTags() {
+    return this.tags;
   }
 
-  public void addTag(String name) {
-    if (this.tags == null) {
-      this.tags = new ArrayList<String>();
-    }
-    this.tags.add(name);
+  public void setTags(List<String> tags) {
+    this.tags = tags;
+    this.overrideTags = true;
+    this.updatedAt = new Date();
   }
 
   public boolean isUpdateOf(Bookmark serverBookmark) {

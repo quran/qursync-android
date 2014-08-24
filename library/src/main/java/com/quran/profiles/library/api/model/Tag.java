@@ -25,6 +25,10 @@ public class Tag {
     return this.id;
   }
 
+  public String getName() {
+    return this.name;
+  }
+
   public String getEtag() {
     return this.etag;
   }

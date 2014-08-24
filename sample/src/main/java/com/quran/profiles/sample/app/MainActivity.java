@@ -7,7 +7,6 @@ import com.quran.profiles.library.api.model.Bookmark;
 import com.quran.profiles.library.api.model.Pointer;
 import com.quran.profiles.library.api.model.Tag;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
@@ -15,6 +14,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.PreferenceManager;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -28,8 +32,10 @@ import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import rx.Subscription;
@@ -37,9 +43,10 @@ import rx.android.observables.AndroidObservable;
 import rx.functions.Action1;
 
 
-public class MainActivity extends Activity {
+public class MainActivity extends FragmentActivity {
   private static final String TAG =
       "com.quran.profiles.sample.app.MainActivity";
+  private static final String TAG_TAGS_FRAGMENT = "TAG_TAGS_FRAGMENT";
 
   private static final String API_KEY = Constants.API_KEY;
   private static final String API_SECRET = Constants.API_SECRET;
@@ -54,8 +61,11 @@ public class MainActivity extends Activity {
   private QuranSync mQuranSync;
   private SharedPreferences mPrefs;
   private List<Bookmark> mBookmarks;
+  private List<Tag> mTags;
+  private Bookmark mEditingBookmark;
   private BookmarksAdapter mAdapter;
   private Set<Integer> mDeletions;
+  private Set<Integer> mTagDeletions;
   private Subscription mSubscription;
 
   static class TokenHandler extends Handler {
@@ -101,6 +111,8 @@ public class MainActivity extends Activity {
 
     mBookmarks = new ArrayList<>();
     mDeletions = new HashSet<>();
+    mTagDeletions = new HashSet<>();
+    mTags = new ArrayList<>();
 
     final boolean loggedIn = mQuranSync.isAuthorized();
     mButton.setText(!loggedIn ?
@@ -180,6 +192,81 @@ public class MainActivity extends Activity {
     }
   }
 
+  public List<Tag> getTags() {
+    return mTags;
+  }
+
+  public List<String> getCurrentBookmarkTags() {
+    if (mEditingBookmark == null) {
+      return new ArrayList<>();
+    }
+    return getTagsFor(mEditingBookmark);
+  }
+
+  private List<String> getTagsFor(Bookmark b) {
+    List<String> tags = b.getTags();
+    if (tags != null) {
+      return tags;
+    }
+    tags = new ArrayList<>();
+
+    final Integer[] ids = b.getTagIds();
+    if (ids != null) {
+      final Map<Integer, Tag> tagHash = new HashMap<>();
+      for (Tag t : mTags) {
+        tagHash.put(t.getId(), t);
+      }
+
+      for (Integer id : ids) {
+        final Tag tag = tagHash.get(id);
+        if (tag != null) {
+          tags.add(tag.getName());
+        }
+      }
+    }
+    return tags;
+  }
+
+  public void saveTags(List<Tag> tags,
+      List<String> bookmarkTags,
+      List<Integer> tagDeletions) {
+    mTags = tags;
+    if (mEditingBookmark != null) {
+      mEditingBookmark.setTags(bookmarkTags);
+    }
+
+    for (Integer id : tagDeletions) {
+      mTagDeletions.add(id);
+    }
+    closeTagDialog();
+    mAdapter.notifyDataSetChanged();
+  }
+
+  public void showTagsFragment(Bookmark b) {
+    mEditingBookmark = b;
+    final FragmentManager fm = getSupportFragmentManager();
+    final FragmentTransaction ft = fm.beginTransaction();
+    final Fragment prev = fm.findFragmentByTag(TAG_TAGS_FRAGMENT);
+    if (prev != null) {
+      ft.remove(prev);
+    }
+
+    final TagsFragment fragment = new TagsFragment();
+    fragment.show(ft, TAG_TAGS_FRAGMENT);
+  }
+
+  public void closeTagDialog() {
+    mEditingBookmark = null;
+
+    final FragmentManager fm = getSupportFragmentManager();
+    final FragmentTransaction ft = fm.beginTransaction();
+    final Fragment prev = fm.findFragmentByTag(TAG_TAGS_FRAGMENT);
+    if (prev != null) {
+      ft.remove(prev);
+    }
+    ft.commit();
+  }
+
   private void authorize() {
     final String url = mQuranSync.getAuthorizationUrl();
     final Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
@@ -198,10 +285,15 @@ public class MainActivity extends Activity {
   public static class SyncClient implements QuranSyncClient {
     private List<Bookmark> mBookmarks;
     private Set<Integer> mDeletions;
+    private List<Tag> mTags;
+    private Set<Integer> mDeletedTagIds;
 
-    public SyncClient(List<Bookmark> bookmarks, Set<Integer> deletedIds) {
+    public SyncClient(List<Bookmark> bookmarks, Set<Integer> deletedIds,
+        List<Tag> tags, Set<Integer> deletedTagIds) {
       mBookmarks = bookmarks;
       mDeletions = deletedIds;
+      mTags = tags;
+      mDeletedTagIds = deletedTagIds;
     }
 
     @Override
@@ -216,12 +308,12 @@ public class MainActivity extends Activity {
 
     @Override
     public List<Tag> getTags() {
-      return new ArrayList<>();
+      return mTags;
     }
 
     @Override
     public Set<Integer> getDeletedTagIds() {
-      return new HashSet<>();
+      return mDeletedTagIds;
     }
   }
 
@@ -229,7 +321,8 @@ public class MainActivity extends Activity {
     mAddButton.setEnabled(false);
     mSyncButton.setEnabled(false);
 
-    final SyncClient client = new SyncClient(mBookmarks, mDeletions);
+    final SyncClient client = new SyncClient(
+        mBookmarks, mDeletions, mTags, mTagDeletions);
     mSubscription = AndroidObservable.bindActivity(this,
         mQuranSync.sync(client))
         .subscribe(new Action1<SyncResult>() {
@@ -237,6 +330,7 @@ public class MainActivity extends Activity {
           public void call(SyncResult result) {
             mDeletions.clear();
             mBookmarks = result.bookmarks;
+            mTags = result.tags;
             mAdapter.notifyDataSetChanged();
 
             mAddButton.setEnabled(true);
@@ -289,7 +383,9 @@ public class MainActivity extends Activity {
       if (convertView == null) {
         convertView = mInflater.inflate(R.layout.bookmark_item, parent, false);
         vh = new ViewHolder();
+        vh.tags = (TextView) convertView.findViewById(R.id.tags);
         vh.title = (TextView) convertView.findViewById(R.id.title);
+        vh.tag = (ImageButton) convertView.findViewById(R.id.tag);
         vh.delete = (ImageButton) convertView.findViewById(R.id.delete);
         convertView.setTag(vh);
       }
@@ -297,6 +393,15 @@ public class MainActivity extends Activity {
 
       final Bookmark bookmark = (Bookmark) getItem(position);
       vh.title.setText(bookmark.toString());
+      final List<String> tags = getTagsFor(bookmark);
+      vh.tags.setText(TextUtils.join(", ", tags));
+
+      vh.tag.setOnClickListener(new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+          showTagsFragment(bookmark);
+        }
+      });
       vh.delete.setOnClickListener(new View.OnClickListener() {
         @Override
         public void onClick(View v) {
@@ -308,7 +413,9 @@ public class MainActivity extends Activity {
   }
 
   public static class ViewHolder {
+    public TextView tags;
     public TextView title;
+    public ImageButton tag;
     public ImageButton delete;
   }
 }
